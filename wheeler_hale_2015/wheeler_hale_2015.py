@@ -2,6 +2,7 @@
 warping.
 """
 import numpy as np
+import pandas
 import lasio
 import fastdtw
 from scipy.optimize import lsq_linear
@@ -31,8 +32,7 @@ def prepare_logs(logs, normalize=True, fillna=True):
         logs: A list of pandas dataframes, one for each log
         normalize: An optional boolean indicating whether to normalize the
             data so that each type of measurement in each log has zero
-            median, and has a range between the first and third quartiles
-            of 1. Default True.
+            median, and has an interquartile range of 1. Default True.
         fillna: An optional boolean indicating whether to fill missing data
             with 0. Default True.
     """
@@ -44,7 +44,8 @@ def prepare_logs(logs, normalize=True, fillna=True):
 
 def _normalize(logs):
     """Shift and scale each measurement of each log to have zero median
-    and a range of 1 between the first and third quartiles.
+    and an interquartile range (range between the first and third quartiles)
+    of 1.
     """
     for l in logs:
         for col in l.columns:
@@ -54,10 +55,21 @@ def _normalize(logs):
             l[col].values[:] = (l[col].values[:] - cq2) / (cq3 - cq1)
 
 
+#def _fillna(logs):
+#    """Fill missing data with zeros."""
+#    for l in logs:
+#        l.fillna(0, inplace=True)
+
+
 def _fillna(logs):
-    """Fill missing data with zeros."""
+    """Fill missing data with random values."""
     for l in logs:
-        l.fillna(0, inplace=True)
+        for col in l.columns:
+            for i, v in enumerate(l[col].values):
+                if pandas.isnull(v):
+                    # Shift and scale so random values have median 0 and
+                    # interquartile range 1
+                    l[col].values[i] = (np.random.random() - 0.5) * 2
 
 
 def _mydist(p):
@@ -71,14 +83,18 @@ def get_rgt(logs, p=1/8.0, its=None):
 
     Args:
         logs: A list of pandas dataframes, one for each log.
-        p: A float specifying the norm to use to measure distance between logs.
-            Default 1/8.
+        p: A positive int or float specifying the norm to use to measure
+            distance between logs. Default 1/8.
         its: An optional int specifying how many iterations of the linear
             solver to run. Default None, which will use the default of the
             solver (100).
     """
 
-    dist, path, path_len = _get_path(logs, _mydist(p))
+    if type(p) == int:
+        dist = p
+    else:
+        dist = _mydist(p)
+    dist, path, path_len = _get_path(logs, dist)
     A = _build_A(logs, dist, path, path_len)
     _solve(A, logs, its)
 
@@ -119,15 +135,19 @@ def _get_path(logs, distfunc):
     path = np.zeros([n_logs, n_logs, est_max_path_len], dtype=np.int)
     for i, l1 in enumerate(logs[:-1]):
         l1_cols = set(l1.columns)
-        for j, l2 in enumerate(logs[i + 1:]):
+        for j in range(i + 1, len(logs)):
+            l2 = logs[j]
             l2_cols = set(l2.columns)
             intersect_cols = list(l1_cols & l2_cols)
             (dist[i, j], path_tmp) = fastdtw.fastdtw(l1[intersect_cols].values,
                                                      l2[intersect_cols].values,
                                                      dist=distfunc)
-            path[i, j, :] = [p[0] for p in path_tmp]
-            path[j, i, :] = [p[1] for p in path_tmp]
-            path_len[i, j] = len(path)
+            print(fastdtw.dtw(l1[intersect_cols].values,
+                                                     l2[intersect_cols].values, dist=2))
+            print('GETPATH', i, j, dist[i, j], path_tmp)
+            path[i, j, :len(path_tmp)] = [p[0] for p in path_tmp]
+            path[j, i, :len(path_tmp)] = [p[1] for p in path_tmp]
+            path_len[i, j] = len(path_tmp)
     path = path[:, :, :np.max(path_len)]
     return dist, path, path_len
 
@@ -143,9 +163,9 @@ def _get_max_len_logs(logs):
 
 def _get_est_max_path_len(max_len_logs):
     """Estimate the maximum path length from the maximum log length, by
-    approximating that it is 1.25 times the length.
+    approximating that it is 1.5 times the length.
     """
-    return int(1.25 * max_len_logs)
+    return int(1.5 * max_len_logs)
 
 
 def _build_A(logs, dist, path, path_len):
@@ -153,7 +173,7 @@ def _build_A(logs, dist, path, path_len):
     to give dRGT (the depth derivative of RGT) for each log.
     """
 
-    Adata, indices, indptr = _allocate_A(path_len, logs)
+    A_nonzeros, indices, indptr = _allocate_A(path_len, logs)
     cumulative_log_len = _get_cumulative_log_len(logs)
 
     # initialise number of nonzeros to 0
@@ -162,20 +182,25 @@ def _build_A(logs, dist, path, path_len):
 
     for i in range(path.shape[0]-1):
         for j in range(i + 1, path.shape[0]):
+            print(i, j, path_len[i, j], dist[i, j], path_len[i, j]/dist[i, j])
             for k in range(path_len[i, j]):
                 num_nonzero_indices, num_nonzero_rows = \
-                        _add_row(Adata, indices, indptr, num_nonzero_rows,
+                        _add_row(A_nonzeros, indices, indptr, num_nonzero_rows,
                                  num_nonzero_indices, cumulative_log_len,
-                                 i, j, k, path, path_len[i, j]/dist[i, j])
+                                 i, j, k, path, 1.0)
+                                 #i, j, k, path, path_len[i, j]/dist[i, j])
+
+    indptr[num_nonzero_rows] = num_nonzero_indices
     # chop off the overestimated space at the end
-    Adata = Adata[:num_nonzero_indices]
+    A_nonzeros = A_nonzeros[:num_nonzero_indices]
     indices = indices[:num_nonzero_indices]
+    indptr = indptr[:num_nonzero_rows + 1]
     # normalize the weights in the A matrix
     # the lower triangle of path_len and dist will be 0, so
     # disable the divide by zero warning for this
-    with np.errstate(divide='ignore', invalid='ignore'):
-        Adata /= np.nansum(path_len/dist)
-    A = csr_matrix((Adata, indices, indptr), dtype=np.float,
+    #with np.errstate(divide='ignore', invalid='ignore'):
+    #    A_nonzeros /= np.nansum(path_len/dist)
+    A = csr_matrix((A_nonzeros, indices, indptr), dtype=np.float,
                    shape=(num_nonzero_rows, cumulative_log_len[-1]))
     return A
 
@@ -187,26 +212,26 @@ def _allocate_A(path_len, logs):
     max_len_logs = _get_max_len_logs(logs)
     # Estimate the average number of nonzeros in a row of the matrix to be
     # the maximum log length.
-    est_av_num_nonzero_in_row = max_len_logs
+    est_av_num_nonzero_in_row = int(2 * max_len_logs)
     est_num_nonzero = num_rows * est_av_num_nonzero_in_row
 
-    Adata = np.zeros(est_num_nonzero)
+    A_nonzeros = np.zeros(est_num_nonzero)
     indices = np.zeros(est_num_nonzero, dtype=np.int)
     indptr = np.zeros(num_rows + 1, dtype=np.int)
 
-    return Adata, indices, indptr
+    return A_nonzeros, indices, indptr
 
 
 def _get_cumulative_log_len(logs):
     """Return a list containing a cumulative sum of log length, starting
     from 0."""
     log_len = np.zeros(len(logs), dtype=np.int)
-    for i, log in logs:
+    for i, log in enumerate(logs):
         log_len[i] = len(log)
     return np.append([0], np.cumsum(log_len))
 
 
-def _add_row(Adata, indices, indptr, num_nonzero_rows, num_nonzero_indices,
+def _add_row(A_nonzeros, indices, indptr, num_nonzero_rows, num_nonzero_indices,
              cumulative_log_len, i, j, k, path, weight):
     """Add a row to the A matrix corresponding to one path pair.
 
@@ -221,19 +246,19 @@ def _add_row(Adata, indices, indptr, num_nonzero_rows, num_nonzero_indices,
     num_nonzero_rows += 1
 
     # + sum (from p = 0 to path[i,j,k]) dRGT[i][p]
-    _add_shift_sum(Adata, indices, num_nonzero_indices,
+    _add_shift_sum(A_nonzeros, indices, num_nonzero_indices,
                    cumulative_log_len, i, path[i, j, k], +weight)
     num_nonzero_indices += path[i, j, k] + 1
 
     # - sum (from p = 0 to path[j,i,k]) dRGT[j][p]
-    _add_shift_sum(Adata, indices, num_nonzero_indices,
+    _add_shift_sum(A_nonzeros, indices, num_nonzero_indices,
                    cumulative_log_len, j, path[j, i, k], -weight)
     num_nonzero_indices += path[j, i, k] + 1
 
     return num_nonzero_indices, num_nonzero_rows
 
 
-def _add_shift_sum(Adata, indices, num_nonzero_indices,
+def _add_shift_sum(A_nonzeros, indices, num_nonzero_indices,
                    cumulative_log_len, logidx, sampleidx, value):
     """Insert 'value' times the sum of the dRGT values of log 'logidx' up to
     'sampleidx', into the matrix A.
@@ -243,7 +268,7 @@ def _add_shift_sum(Adata, indices, num_nonzero_indices,
     idx_range = range(num_nonzero_indices,
                       num_nonzero_indices + col1 - col0 + 1)
     indices[idx_range] = np.arange(col0, col1 + 1)
-    Adata[idx_range] = value
+    A_nonzeros[idx_range] = value
 
 
 def _solve(A, logs, its=None):
