@@ -2,7 +2,7 @@ from setuptools import setup
 
 setup(
         name='wheeler_hale_2015',
-        version='0.1.0',
+        version='0.1.1',
         description='An implementation of Wheeler and Hale\'s 2015 method for aligning well logs using dynamic warping',
         url='https://github.com/ar4/wheeler_hale_2015',
         author='Alan Richardson',
