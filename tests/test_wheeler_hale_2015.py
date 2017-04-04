@@ -1,6 +1,7 @@
 """Tests for wheeler_hale_2015.
 """
 import pytest
+import numpy as np
 import pandas
 from wheeler_hale_2015.wheeler_hale_2015 import load_logs, prepare_logs, get_rgt
 
