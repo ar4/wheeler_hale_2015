@@ -9,7 +9,7 @@ setup(
         license='MIT',
         packages=['wheeler_hale_2015'],
         package_dir={'wheeler_hale_2015:wheeler_hale_2015'},
-        install_requires=['numpy','scipy','pandas','lasio']
+        install_requires=['numpy','scipy','pandas','lasio','fastdtw']
         classifiers=[
             'Development Status :: 3 - Alpha',
             'Intended Audience :: Science/Research',

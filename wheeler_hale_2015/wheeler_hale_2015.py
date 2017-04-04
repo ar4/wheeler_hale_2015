@@ -90,12 +90,12 @@ def get_rgt(logs, p=1/8.0, its=None):
             solver (100).
     """
 
-    if type(p) == int:
-        dist = p
+    if isinstance(p, int):
+        distfunc = p
     else:
-        dist = _mydist(p)
-    dist, path, path_len = _get_path(logs, dist)
-    A = _build_A(logs, dist, path, path_len)
+        distfunc = _mydist(p)
+    dist, path, path_len = _get_path(logs, distfunc)
+    A = _build_A(logs, path, path_len)
     _solve(A, logs, its)
 
 
@@ -139,12 +139,9 @@ def _get_path(logs, distfunc):
             l2 = logs[j]
             l2_cols = set(l2.columns)
             intersect_cols = list(l1_cols & l2_cols)
-            (dist[i, j], path_tmp) = fastdtw.fastdtw(l1[intersect_cols].values,
-                                                     l2[intersect_cols].values,
-                                                     dist=distfunc)
-            print(fastdtw.dtw(l1[intersect_cols].values,
-                                                     l2[intersect_cols].values, dist=2))
-            print('GETPATH', i, j, dist[i, j], path_tmp)
+            dist[i, j], path_tmp = fastdtw.fastdtw(l1[intersect_cols].values,
+                                                   l2[intersect_cols].values,
+                                                   dist=distfunc)
             path[i, j, :len(path_tmp)] = [p[0] for p in path_tmp]
             path[j, i, :len(path_tmp)] = [p[1] for p in path_tmp]
             path_len[i, j] = len(path_tmp)
@@ -168,7 +165,7 @@ def _get_est_max_path_len(max_len_logs):
     return int(1.5 * max_len_logs)
 
 
-def _build_A(logs, dist, path, path_len):
+def _build_A(logs, path, path_len):
     """Construct the A matrix for the system of equations that will be solved
     to give dRGT (the depth derivative of RGT) for each log.
     """
@@ -182,24 +179,17 @@ def _build_A(logs, dist, path, path_len):
 
     for i in range(path.shape[0]-1):
         for j in range(i + 1, path.shape[0]):
-            print(i, j, path_len[i, j], dist[i, j], path_len[i, j]/dist[i, j])
             for k in range(path_len[i, j]):
                 num_nonzero_indices, num_nonzero_rows = \
                         _add_row(A_nonzeros, indices, indptr, num_nonzero_rows,
                                  num_nonzero_indices, cumulative_log_len,
                                  i, j, k, path, 1.0)
-                                 #i, j, k, path, path_len[i, j]/dist[i, j])
 
     indptr[num_nonzero_rows] = num_nonzero_indices
     # chop off the overestimated space at the end
     A_nonzeros = A_nonzeros[:num_nonzero_indices]
     indices = indices[:num_nonzero_indices]
     indptr = indptr[:num_nonzero_rows + 1]
-    # normalize the weights in the A matrix
-    # the lower triangle of path_len and dist will be 0, so
-    # disable the divide by zero warning for this
-    #with np.errstate(divide='ignore', invalid='ignore'):
-    #    A_nonzeros /= np.nansum(path_len/dist)
     A = csr_matrix((A_nonzeros, indices, indptr), dtype=np.float,
                    shape=(num_nonzero_rows, cumulative_log_len[-1]))
     return A
