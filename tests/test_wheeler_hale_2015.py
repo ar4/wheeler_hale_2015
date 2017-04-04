@@ -2,7 +2,7 @@
 """
 import pytest
 import pandas
-from wheeler_hale_2015.wheeler_hale_2015 import *
+from wheeler_hale_2015.wheeler_hale_2015 import load_logs, prepare_logs, get_rgt
 
 @pytest.fixture
 def logs(scope='module'):
@@ -12,7 +12,7 @@ def test_load_logs(logs):
     """Load the two test log files (tests/testlog*.las)."""
     assert(len(logs) == 2)
     for log in logs:
-        assert(type(log) == pandas.core.frame.DataFrame)
+        assert(isinstance(log, pandas.core.frame.DataFrame))
 
 def test_prepare_logs(logs):
     """Verify that the logs have zero mean and interquartile range 1 after
