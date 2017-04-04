@@ -29,7 +29,7 @@ def prepare_logs(logs, normalize=True, fillna=True):
     """Prepare the input log files.
 
     Args:
-        logs: A list of pandas dataframes, one for each log
+        logs: A list of pandas dataframes, one for each log.
         normalize: An optional boolean indicating whether to normalize the
             data so that each type of measurement in each log has zero
             median, and has an interquartile range of 1. Default True.
