@@ -78,7 +78,7 @@ def _mydist(p):
 
 
 def get_rgt(logs, p=1/8.0, its=None):
-    """Find the Relative Geologic Age (RGT) of each depth in each log and
+    """Find the Relative Geologic Time (RGT) of each depth in each log and
     save this in a new 'RGT' column of each log's dataframe.
 
     Args:
