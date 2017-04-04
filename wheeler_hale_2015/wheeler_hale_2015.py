@@ -77,7 +77,7 @@ def _mydist(p):
     return lambda x, y: np.linalg.norm(x - y, ord=p)
 
 
-def get_rgt(logs, p=1/8.0, its=None):
+def get_rgt(logs, p=1/8.0, its=None, path_multiplier=1.5, row_multiplier=2):
     """Find the Relative Geologic Time (RGT) of each depth in each log and
     save this in a new 'RGT' column of each log's dataframe.
 
@@ -88,18 +88,23 @@ def get_rgt(logs, p=1/8.0, its=None):
         its: An optional int specifying how many iterations of the linear
             solver to run. Default None, which will use the default of the
             solver (100).
+        path_multiplier: An optional scalar used to multiply the length of
+            the longest log to estimate the maximum path length. Default 1.5.
+        row_multiplier: An optional scalar used to multiply the length of
+            the longest log to estimate the average number of nonzeros per
+            row of the A matrix, for preallocation. Default 2.
     """
 
     if isinstance(p, int):
         distfunc = p
     else:
         distfunc = _mydist(p)
-    dist, path, path_len = _get_path(logs, distfunc)
-    A = _build_A(logs, path, path_len)
+    dist, path, path_len = _get_path(logs, distfunc, path_multiplier)
+    A = _build_A(logs, path, path_len, row_multiplier)
     _solve(A, logs, its)
 
 
-def _get_path(logs, distfunc):
+def _get_path(logs, distfunc, path_multiplier=1.5):
     """Using dynamic warping to determine the path that aligns each pair of
     logs, and its distance.
 
@@ -111,6 +116,8 @@ def _get_path(logs, distfunc):
             If given a function, the function should accept two vectors
             (corresponding to the measurements at a certain depths for a
             pair of logs) and return a scalar distance.
+        path_multiplier: An float used to multiply the length of
+            the longest log to estimate the maximum path length.
 
     Returns:
         (With n_logs being the number of logs, and max_path_len being the
@@ -127,7 +134,7 @@ def _get_path(logs, distfunc):
             excluding the main diagonal, is filled (it is symmetric).
     """
     max_len_logs = _get_max_len_logs(logs)
-    est_max_path_len = _get_est_max_path_len(max_len_logs)
+    est_max_path_len = _get_est_max_path_len(max_len_logs, path_multiplier)
     n_logs = len(logs)
 
     dist = np.zeros([n_logs, n_logs])
@@ -158,19 +165,19 @@ def _get_max_len_logs(logs):
     return max_len_logs
 
 
-def _get_est_max_path_len(max_len_logs):
+def _get_est_max_path_len(max_len_logs, path_multiplier):
     """Estimate the maximum path length from the maximum log length, by
-    approximating that it is 1.5 times the length.
+    approximating that it is 'path_multiplier' times the length.
     """
-    return int(1.5 * max_len_logs)
+    return int(path_multiplier * max_len_logs)
 
 
-def _build_A(logs, path, path_len):
+def _build_A(logs, path, path_len, row_multiplier):
     """Construct the A matrix for the system of equations that will be solved
     to give dRGT (the depth derivative of RGT) for each log.
     """
 
-    A_nonzeros, indices, indptr = _allocate_A(path_len, logs)
+    A_nonzeros, indices, indptr = _allocate_A(path_len, logs, row_multiplier)
     cumulative_log_len = _get_cumulative_log_len(logs)
 
     # initialise number of nonzeros to 0
@@ -195,14 +202,14 @@ def _build_A(logs, path, path_len):
     return A
 
 
-def _allocate_A(path_len, logs):
+def _allocate_A(path_len, logs, row_multiplier):
     """Allocate the arrays necessary to build the sparse A matrix."""
     num_pairs = np.sum(path_len)
     num_rows = num_pairs
     max_len_logs = _get_max_len_logs(logs)
     # Estimate the average number of nonzeros in a row of the matrix to be
-    # the maximum log length.
-    est_av_num_nonzero_in_row = int(2 * max_len_logs)
+    # the maximum log length times a multiplier.
+    est_av_num_nonzero_in_row = int(row_multiplier * max_len_logs)
     est_num_nonzero = num_rows * est_av_num_nonzero_in_row
 
     A_nonzeros = np.zeros(est_num_nonzero)
