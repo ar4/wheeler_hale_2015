@@ -72,7 +72,7 @@ def _fillna(logs):
                     l[col].values[i] = (np.random.random() - 0.5) * 2
 
 
-def _mydist(p):
+def _np_norm(p):
     """Return the p-norm of the difference between x and y."""
     return lambda x, y: np.linalg.norm(x - y, ord=p)
 
@@ -98,7 +98,7 @@ def get_rgt(logs, p=1/8.0, its=None, path_multiplier=1.5, row_multiplier=2):
     if isinstance(p, int):
         distfunc = p
     else:
-        distfunc = _mydist(p)
+        distfunc = _np_norm(p)
     dist, path, path_len = _get_path(logs, distfunc, path_multiplier)
     A = _build_A(logs, path, path_len, row_multiplier)
     _solve(A, logs, its)
@@ -146,12 +146,13 @@ def _get_path(logs, distfunc, path_multiplier=1.5):
             l2 = logs[j]
             l2_cols = set(l2.columns)
             intersect_cols = list(l1_cols & l2_cols)
-            dist[i, j], path_tmp = fastdtw.fastdtw(l1[intersect_cols].values,
-                                                   l2[intersect_cols].values,
-                                                   dist=distfunc)
-            path[i, j, :len(path_tmp)] = [p[0] for p in path_tmp]
-            path[j, i, :len(path_tmp)] = [p[1] for p in path_tmp]
-            path_len[i, j] = len(path_tmp)
+            dist[i, j], path1, path2, path_len[i, j] = \
+                    _dynamic_warping(l1[intersect_cols].values,
+                                     l2[intersect_cols].values,
+                                     distfunc)
+            path[i, j, :len(path1)] = path1
+            path[j, i, :len(path2)] = path2
+
     path = path[:, :, :np.max(path_len)]
     return dist, path, path_len
 
@@ -170,6 +171,34 @@ def _get_est_max_path_len(max_len_logs, path_multiplier):
     approximating that it is 'path_multiplier' times the length.
     """
     return int(path_multiplier * max_len_logs)
+
+
+def _dynamic_warping(l1, l2, distfunc):
+    """Use dynamic warping to find a path that aligns the two input logs."""
+    dist, path_tmp = fastdtw.fastdtw(l1, l2, dist=distfunc)
+    path_tmp = _chop_repeated(path_tmp)
+    path1 = [p[0] for p in path_tmp]
+    path2 = [p[1] for p in path_tmp]
+    path_len = len(path_tmp)
+    return dist, path1, path2, path_len
+
+
+def _chop_repeated(path):
+    """Chop out entries of the path that repeat in one coordinate.
+    
+    Repeating in one coordinate indicates that one log is missing time
+    represented in the other log. We therefore do not want to say that
+    the RGT of the two logs should be the same for these indices, and so
+    remove them from the path.
+    """
+    new_path = []
+    for i, pair in enumerate(path[:-1]):
+        if (pair[0] != path[i+1][0]) and (pair[1] != path[i+1][1]):
+            new_path.append(pair)
+    # Deal with last pair
+    if (path[-1][0] != path[-2][0]) and (path[-1][1] != path[-2][1]):
+        new_path.append(path[-1])
+    return new_path
 
 
 def _build_A(logs, path, path_len, row_multiplier):

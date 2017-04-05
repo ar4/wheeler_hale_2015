@@ -31,25 +31,48 @@ def test_prepare_logs(logs):
             assert(np.isclose(cq3 - cq1, 1.0))
 
 def test_get_rgt_1():
-    """Verify that three logs are assigned the correct RGT.
-    """
+    """Verify that three logs are assigned the correct RGT."""
     logs=[pandas.DataFrame({'d': [0.0, 0.0, 0.0, 0.0, 0.0, 1.0, 2.0, 3.0]}),
           pandas.DataFrame({'d': [0.0, 0.0, 0.0, 1.0, 2.0, 3.0, 4.0, 5.0]}),
           pandas.DataFrame({'d': [0.0, 1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0]})]
     get_rgt(logs)
     assert(np.isclose(logs[0]['RGT'].values[5], logs[1]['RGT'].values[3]))
     assert(np.isclose(logs[1]['RGT'].values[3], logs[2]['RGT'].values[1]))
-#
-#def test_get_rgt_2():
-#    c1 = np.random.random(104)
-#    logs=[pandas.DataFrame({'c1': c1[:100]}),
-#                            #'c2': [np.nan, np.nan, np.nan, -1.0, 0.0, 1.0, 2.0, 3.0]}),
-#          pandas.DataFrame({'c1': c1[2:102]}),
-#                            #'c2': [np.nan, np.nan, 0.0, 1.0, 2.0, 3.0, 4.0, 5.0]}),
-#          pandas.DataFrame({'c1': c1[4:104]})]#,
-#                            #'c2': [np.nan, 1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0]})]
-#    #prepare_logs(logs)
-#    get_rgt(logs, p=1)
-#    print(logs)
-#    assert(np.isclose(logs[0]['RGT'].values[4], logs[1]['RGT'].values[2]))
-#    assert(np.isclose(logs[1]['RGT'].values[2], logs[2]['RGT'].values[0]))
+
+def test_get_rgt_2():
+    """Verify that three random logs are assigned the correct RGT."""
+    np.random.seed(1)
+    c1 = np.random.random(104)
+    logs=[pandas.DataFrame({'c1': c1[:100]}),
+          pandas.DataFrame({'c1': c1[2:102]}),
+          pandas.DataFrame({'c1': c1[4:104]})]
+    get_rgt(logs, p=1, its=5000)
+    assert(np.isclose(logs[0]['RGT'].values[4], logs[1]['RGT'].values[2]))
+    assert(np.isclose(logs[1]['RGT'].values[2], logs[2]['RGT'].values[0]))
+
+def test_get_rgt_3():
+    """Verify that three random, prepared logs are assigned the correct RGT."""
+    np.random.seed(1)
+    c1 = np.random.random(104)
+    logs=[pandas.DataFrame({'c1': c1[:100]}),
+          pandas.DataFrame({'c1': c1[2:102]}),
+          pandas.DataFrame({'c1': c1[4:104]})]
+    prepare_logs(logs)
+    get_rgt(logs, p=1, its=5000)
+    assert(np.isclose(logs[0]['RGT'].values[6], logs[1]['RGT'].values[4]))
+    assert(np.isclose(logs[1]['RGT'].values[4], logs[2]['RGT'].values[2]))
+
+def test_get_rgt_4():
+    """Verify that three multidimensional random, prepared logs are assigned
+    the correct RGT.
+    """
+    np.random.seed(1)
+    c1 = np.random.random(104)
+    c2 = np.random.random(104)
+    logs=[pandas.DataFrame({'c1': c1[:100], 'c2': c2[:100]}),
+          pandas.DataFrame({'c1': c1[2:102], 'c2': c2[2:102]}),
+          pandas.DataFrame({'c1': c1[4:104], 'c2': c2[4:104]})]
+    prepare_logs(logs)
+    get_rgt(logs, p=1, its=5000)
+    assert(np.isclose(logs[0]['RGT'].values[6], logs[1]['RGT'].values[4]))
+    assert(np.isclose(logs[1]['RGT'].values[4], logs[2]['RGT'].values[2]))
