@@ -77,7 +77,8 @@ def _np_norm(p):
     return lambda x, y: np.linalg.norm(x - y, ord=p)
 
 
-def get_rgt(logs, p=1/8.0, its=None, path_multiplier=1.5, row_multiplier=2):
+def get_rgt(logs, p=1/8.0, radius=1, its=None, path_multiplier=1.5,
+            row_multiplier=2):
     """Find the Relative Geologic Time (RGT) of each depth in each log and
     save this in a new 'RGT' column of each log's dataframe.
 
@@ -85,6 +86,7 @@ def get_rgt(logs, p=1/8.0, its=None, path_multiplier=1.5, row_multiplier=2):
         logs: A list of pandas dataframes, one for each log.
         p: A positive int or float specifying the norm to use to measure
             distance between logs. Default 1/8.
+        radius: An int specifying the radius value to pass to FastDTW.
         its: An optional int specifying how many iterations of the linear
             solver to run. Default None, which will use the default of the
             solver (100).
@@ -99,12 +101,12 @@ def get_rgt(logs, p=1/8.0, its=None, path_multiplier=1.5, row_multiplier=2):
         distfunc = p
     else:
         distfunc = _np_norm(p)
-    dist, path, path_len = _get_path(logs, distfunc, path_multiplier)
+    dist, path, path_len = _get_path(logs, distfunc, radius, path_multiplier)
     A = _build_A(logs, path, path_len, row_multiplier)
     _solve(A, logs, its)
 
 
-def _get_path(logs, distfunc, path_multiplier=1.5):
+def _get_path(logs, distfunc, radius, path_multiplier):
     """Using dynamic warping to determine the path that aligns each pair of
     logs, and its distance.
 
@@ -115,6 +117,7 @@ def _get_path(logs, distfunc, path_multiplier=1.5):
             dynamic warping. If given an int p, the pth norm will be used.
             If given a function, the function should accept two vectors
             (corresponding to the measurements at a certain depths for a
+        radius: An int specifying the radius value to pass to DTW.
             pair of logs) and return a scalar distance.
         path_multiplier: An float used to multiply the length of
             the longest log to estimate the maximum path length.
@@ -149,7 +152,7 @@ def _get_path(logs, distfunc, path_multiplier=1.5):
             dist[i, j], path1, path2, path_len[i, j] = \
                     _dynamic_warping(l1[intersect_cols].values,
                                      l2[intersect_cols].values,
-                                     distfunc)
+                                     distfunc, radius)
             path[i, j, :len(path1)] = path1
             path[j, i, :len(path2)] = path2
 
@@ -173,9 +176,9 @@ def _get_est_max_path_len(max_len_logs, path_multiplier):
     return int(path_multiplier * max_len_logs)
 
 
-def _dynamic_warping(l1, l2, distfunc):
+def _dynamic_warping(l1, l2, distfunc, radius):
     """Use dynamic warping to find a path that aligns the two input logs."""
-    dist, path_tmp = fastdtw.fastdtw(l1, l2, dist=distfunc)
+    dist, path_tmp = fastdtw.fastdtw(l1, l2, dist=distfunc, radius=radius)
     path_tmp = _chop_repeated(path_tmp)
     path1 = [p[0] for p in path_tmp]
     path2 = [p[1] for p in path_tmp]
@@ -185,7 +188,7 @@ def _dynamic_warping(l1, l2, distfunc):
 
 def _chop_repeated(path):
     """Chop out entries of the path that repeat in one coordinate.
-    
+
     Repeating in one coordinate indicates that one log is missing time
     represented in the other log. We therefore do not want to say that
     the RGT of the two logs should be the same for these indices, and so
