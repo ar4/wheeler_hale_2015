@@ -8,3 +8,5 @@ An implementation of [Wheeler and Hale's 2015 method](https://dspace.library.col
 To install: `pip install wheeler_hale_2015`.
 
 I have created a Jupyter Notebook that discusses the method, including the modifications that I made to it, and demonstrates its use: [Reproducing Geophysics: Wheeler and Hale (2015)'s well log alignment using dynamic warping](https://github.com/ar4/wheeler_hale_2015/blob/master/notebooks/wheeler_hale_2015.ipynb).
+
+The data that I plot in the notebook, and include a subset of in the notebook's directory, comes from RMOTC and the U.S. Department of Energy.
