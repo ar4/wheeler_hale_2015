@@ -2,7 +2,7 @@ appdirs==1.4.3
 fastdtw==0.3.0
 lasio==0.11.2
 namedlist==1.7
-numpy==1.12.1
+numpy==1.22.0
 ordereddict==1.1
 packaging==16.8
 pandas==0.19.2
